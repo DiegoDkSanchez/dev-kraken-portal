@@ -1,4 +1,4 @@
-name: Deploy portal
+name: Deploy DEV KRAKEN
 on:
   push:
     branches: [main]
@@ -32,7 +32,8 @@ jobs:
       - run: npm test
         env:
           TEST_DATABASE_URL: postgres://kraken:test-only@localhost:5432/kraken_test
-      - run: npm run build
+      - run: npm run build:pages
+      - run: npm run test:pages
       - run: npm audit --omit=dev --audit-level=high
   api:
     needs: verify
@@ -116,12 +117,11 @@ jobs:
         env:
           API_URL: ${{ needs.api.outputs.url }}/api
         run: node scripts/web-config.mjs
-      - name: Build GitHub Pages app
-        env:
-          BASE_PATH: ${{ steps.config.outputs.base_path }}
-        run: npm run build -- --base-href="${BASE_PATH}/"
+      - name: Build landing page and portal
+        run: npm run build:pages
+      - run: npm run test:pages
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist/portal/browser
+          path: dist/pages
       - uses: actions/deploy-pages@v4
         id: pages

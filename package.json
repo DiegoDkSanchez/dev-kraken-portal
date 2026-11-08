@@ -12,7 +12,9 @@
     "api": "npm run dev -w server",
     "test": "npm test -w server",
     "db:migrate": "npm run migrate -w server",
-    "db:seed": "npm run seed -w server"
+    "db:seed": "npm run seed -w server",
+    "build:pages": "npm run build -- --base-href=/portal/ && node scripts/build-pages.mjs",
+    "test:pages": "node --test scripts/build-pages.test.mjs"
   },
   "dependencies": {
     "@angular/common": "^22.2.5",
