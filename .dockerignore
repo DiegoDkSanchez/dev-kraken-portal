@@ -1,0 +1,14 @@
+node_modules
+.git
+.env*
+dist
+.angular
+infra
+web
+server/test
+*.log
+
+.tools
+.gcloud
+
+.gh

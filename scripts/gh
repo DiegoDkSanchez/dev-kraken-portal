@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+export GH_CONFIG_DIR="$root/.gh"
+exec "$root/.tools/gh_2.103.3_linux_amd64/bin/gh" "$@"

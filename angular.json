@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "projects": {
+    "portal": {
+      "projectType": "application",
+      "root": "web",
+      "sourceRoot": "web/src",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "web/src/main.ts",
+            "tsConfig": "web/tsconfig.app.json",
+            "index": "web/src/index.html",
+            "styles": ["web/src/styles.css"],
+            "assets": [{ "glob": "**/*", "input": "web/public" }],
+            "outputPath": "dist/portal"
+          },
+          "configurations": {
+            "production": {
+              "outputHashing": "all",
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "750kB",
+                  "maximumError": "1MB"
+                }
+              ]
+            },
+            "development": { "optimization": false, "sourceMap": true }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "configurations": {
+            "development": { "buildTarget": "portal:build:development" }
+          },
+          "defaultConfiguration": "development"
+        }
+      }
+    }
+  }
+}

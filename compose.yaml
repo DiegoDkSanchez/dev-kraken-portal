@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: kraken
+      POSTGRES_USER: kraken
+      POSTGRES_PASSWORD: kraken
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: ["kraken-db:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kraken"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  mail:
+    image: axllent/mailpit:v1.27
+    ports: ["127.0.0.1:1025:1025", "127.0.0.1:8025:8025"]
+volumes:
+  kraken-db:

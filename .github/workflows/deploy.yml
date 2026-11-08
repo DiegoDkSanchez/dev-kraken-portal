@@ -1,0 +1,127 @@
+name: Deploy portal
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: portal-production
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: kraken
+          POSTGRES_PASSWORD: test-only
+          POSTGRES_DB: kraken_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U kraken"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+        env:
+          TEST_DATABASE_URL: postgres://kraken:test-only@localhost:5432/kraken_test
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
+  api:
+    needs: verify
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
+    env:
+      PROJECT_ID: devkraken-514023
+      REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+      APP_URL: ${{ vars.APP_URL }}
+      CLOUD_SQL_CONNECTION: ${{ vars.CLOUD_SQL_CONNECTION }}
+      RUNTIME_SERVICE_ACCOUNT: ${{ vars.RUNTIME_SERVICE_ACCOUNT }}
+      SMTP_ENABLED: ${{ vars.SMTP_ENABLED || 'false' }}
+      SMTP_HOST: ${{ vars.SMTP_HOST }}
+      SMTP_PORT: ${{ vars.SMTP_PORT || '587' }}
+      SMTP_USER: ${{ vars.SMTP_USER }}
+      MAIL_FROM: ${{ vars.MAIL_FROM }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check deployment configuration
+        run: |
+          for key in APP_URL CLOUD_SQL_CONNECTION RUNTIME_SERVICE_ACCOUNT; do
+            test -n "${!key}" || { echo "Missing variable: $key"; exit 1; }
+          done
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Build and push API
+        run: |
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          image="$REGION-docker.pkg.dev/$PROJECT_ID/dev-kraken/api:$GITHUB_SHA"
+          docker build -f server/Dockerfile -t "$image" .
+          docker push "$image"
+      - name: Deploy Cloud Run
+        id: deploy
+        run: |
+          node scripts/cloud-env.mjs > /tmp/kraken-env.yaml
+          secrets="PGPASSWORD=kraken-db-password:latest"
+          if [ "$SMTP_ENABLED" = "true" ]; then
+            secrets="$secrets,SMTP_PASSWORD=kraken-smtp-password:latest"
+          fi
+          gcloud run deploy dev-kraken-api \
+            --project="$PROJECT_ID" --region="$REGION" \
+            --image="$REGION-docker.pkg.dev/$PROJECT_ID/dev-kraken/api:$GITHUB_SHA" \
+            --service-account="$RUNTIME_SERVICE_ACCOUNT" \
+            --add-cloudsql-instances="$CLOUD_SQL_CONNECTION" \
+            --set-secrets="$secrets" \
+            --env-vars-file=/tmp/kraken-env.yaml \
+            --allow-unauthenticated --port=8080 \
+            --cpu=1 --memory=512Mi --min-instances=0 --max-instances=3 --concurrency=40 --quiet
+          url=$(gcloud run services describe dev-kraken-api --project="$PROJECT_ID" --region="$REGION" --format='value(status.url)')
+          curl --fail --retry 5 --retry-delay 3 "$url/api/health"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+  web:
+    needs: api
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/configure-pages@v5
+        id: config
+      - run: npm ci
+      - name: Configure API URL
+        env:
+          API_URL: ${{ needs.api.outputs.url }}/api
+        run: node scripts/web-config.mjs
+      - name: Build GitHub Pages app
+        env:
+          BASE_PATH: ${{ steps.config.outputs.base_path }}
+        run: npm run build -- --base-href="${BASE_PATH}/"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/portal/browser
+      - uses: actions/deploy-pages@v4
+        id: pages
