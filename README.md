@@ -1,6 +1,14 @@
-# DEV KRAKEN Customer Portal
+# DEV KRAKEN Monorepo
 
 Angular 22 dashboard, Express 5 API, PostgreSQL 17. Branded with the supplied DEV KRAKEN logo and palette: navy `#011F4B`, cyan `#00FFFF`, off-white `#F5F5F5`, slate `#62727B`.
+
+## Applications
+
+- `landing/`: public landing page at https://devkraken.xyz/.
+- `web/`: Angular customer portal at https://devkraken.xyz/portal/.
+- `server/`: Express API on Cloud Run.
+
+`npm run build:pages` assembles both frontends into `dist/pages`; serve that directory to preview the complete site. `npm run test:pages` checks the published layout and local asset references. The landing page was imported from `DiegoDkSanchez/dev-kraken-web` at commit `9b653a24c77b816fb54adefa080a001ea5b9ddda`.
 
 ## Included workflows
 

@@ -29,5 +29,6 @@ jobs:
       - run: npm test
         env:
           TEST_DATABASE_URL: postgres://kraken:test-only@localhost:5432/kraken_test
-      - run: npm run build
+      - run: npm run build:pages
+      - run: npm run test:pages
       - run: npm audit --omit=dev --audit-level=high
