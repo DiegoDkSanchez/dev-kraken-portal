@@ -2332,3 +2332,12 @@ td small {
     scroll-behavior: auto !important;
   }
 }
+
+.team-filters { display: flex; gap: 16px; align-items: end; flex-wrap: wrap; margin-bottom: 20px; }
+.team-filters label { margin: 0; min-width: 180px; }
+.team-actions { position: relative; width: 65px; }
+.team-options { position: relative; margin-top: 8px; z-index: 5; padding: 8px; min-width: 180px; background: white; border: 1px solid #dbe1e6; border-radius: 8px; box-shadow: 0 6px 20px #14233120; }
+.delete-action { background: transparent; border: 0; padding: 10px; width: 100%; text-align: left; color: #b42318; cursor: pointer; }
+.delete-action:disabled { opacity: .5; cursor: not-allowed; }
+.button.danger { background: #b42318; color: white; border-color: #b42318; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
