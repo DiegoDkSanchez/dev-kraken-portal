@@ -66,6 +66,36 @@ export class App {
   history = signal<any[]>([]);
   estimates = signal<any[]>([]);
   team = signal<any>({ users: [], invitations: [] });
+  teamEmail = signal("");
+  teamRole = signal("all");
+  teamOptions = signal("");
+  deleteTarget = signal<{ id: string; email: string; kind: "member" | "invitation" } | null>(null);
+  filteredMembers = computed(() => this.team().users.filter((m: User) => this.matchesTeamFilter(m)));
+  filteredInvitations = computed(() => this.team().invitations.filter((m: User) => this.matchesTeamFilter(m)));
+  matchesTeamFilter(member: User) {
+    return member.email.toLowerCase().includes(this.teamEmail().trim().toLowerCase()) &&
+      (this.teamRole() === "all" || member.role === this.teamRole());
+  }
+  confirmTeamDelete(member: User, kind: "member" | "invitation") {
+    this.deleteTarget.set({ id: member.id, email: member.email, kind });
+    this.teamOptions.set("");
+    this.modal.set("deleteTeam");
+  }
+  deleteTeamEntry() {
+    const target = this.deleteTarget();
+    if (!target) return;
+    this.run(async () => {
+      await this.request(`/${target.kind === "member" ? "team" : "invitations"}/${target.id}`, "DELETE");
+      this.team.update((team: any) => ({ ...team,
+        [target.kind === "member" ? "users" : "invitations"]:
+          team[target.kind === "member" ? "users" : "invitations"].filter((m: User) => m.id !== target.id)
+      }));
+      this.modal.set("");
+      this.deleteTarget.set(null);
+      this.toast(target.kind === "member" ? "Member deleted" : "Invitation deleted");
+    });
+  }
+  @HostListener("document:click") dismissTeamOptions() { this.teamOptions.set(""); }
   project = computed(() =>
     this.projects().find((p) => p.id === this.selectedProject()),
   );
@@ -610,6 +640,7 @@ export class App {
     });
   }
   @HostListener("document:keydown.escape") close() {
+    this.teamOptions.set("");
     if (!this.busy()) {
       this.modal.set("");
       this.previousFocus?.focus();

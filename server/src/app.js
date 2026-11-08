@@ -106,7 +106,7 @@ async function estimateAccess(user, estimateId, db = pool) {
 async function validateAssignee(db, projectId, assignee) {
   if (!assignee) return;
   const { rows } = await db.query(
-    "SELECT 1 FROM users u WHERE u.id=$1 AND (u.role='admin' OR (u.role='developer' AND EXISTS(SELECT 1 FROM project_members WHERE user_id=u.id AND project_id=$2)))",
+    "SELECT 1 FROM users u WHERE u.id=$1 AND u.deleted_at IS NULL AND (u.role='admin' OR (u.role='developer' AND EXISTS(SELECT 1 FROM project_members WHERE user_id=u.id AND project_id=$2)))",
     [assignee, projectId],
   );
   if (!rows.length) fail(400, "Assignee must belong to this project");
@@ -123,7 +123,7 @@ app.post("/api/auth/login", authLimit, async (req, res) => {
   const input = z
     .object({ email: z.email(), password: z.string().max(128) })
     .parse(req.body);
-  const { rows } = await query("SELECT * FROM users WHERE email=$1", [
+  const { rows } = await query("SELECT * FROM users WHERE email=$1 AND deleted_at IS NULL", [
     input.email.toLowerCase(),
   ]);
   if (
@@ -299,7 +299,7 @@ app.get("/api/projects/:id/members", async (req, res) => {
   res.json(
     (
       await query(
-        "SELECT u.id,u.name,u.role,u.title FROM users u WHERE u.role='admin' OR EXISTS(SELECT 1 FROM project_members m WHERE m.user_id=u.id AND m.project_id=$1) ORDER BY u.name",
+        "SELECT u.id,u.name,u.role,u.title FROM users u WHERE u.deleted_at IS NULL AND (u.role='admin' OR EXISTS(SELECT 1 FROM project_members m WHERE m.user_id=u.id AND m.project_id=$1)) ORDER BY u.name",
         [req.params.id],
       )
     ).rows,
@@ -309,6 +309,8 @@ app.post("/api/projects/:id/members", roles("admin"), async (req, res) => {
   await projectAccess(req.user, req.params.id);
   const { user_id } = z.object({ user_id: id }).parse(req.body);
   await transaction(async (db) => {
+    if (!(await db.query("SELECT 1 FROM users WHERE id=$1 AND deleted_at IS NULL FOR SHARE", [user_id])).rowCount)
+      fail(404, "Member not found");
     await db.query(
       "INSERT INTO project_members(project_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING",
       [req.params.id, user_id],
@@ -651,7 +653,7 @@ app.post("/api/estimates/:id/approve", roles("client"), async (req, res) => {
 app.get("/api/team", roles("admin"), async (req, res) =>
   res.json({
     users: (
-      await query("SELECT id,email,name,role,title FROM users ORDER BY name")
+      await query("SELECT id,email,name,role,title FROM users WHERE deleted_at IS NULL ORDER BY name")
     ).rows,
     invitations: (
       await query(
@@ -660,6 +662,31 @@ app.get("/api/team", roles("admin"), async (req, res) =>
     ).rows,
   }),
 );
+app.delete("/api/team/:id", roles("admin"), async (req, res) => {
+  const userId = id.parse(req.params.id);
+  if (userId === req.user.id) fail(409, "You cannot delete your own account");
+  await transaction(async (db) => {
+    const result = await db.query(
+      "UPDATE users SET deleted_at=now(),password_hash=NULL WHERE id=$1 AND deleted_at IS NULL RETURNING id",
+      [userId],
+    );
+    if (!result.rowCount) fail(404, "Member not found");
+    await db.query("DELETE FROM sessions WHERE user_id=$1", [userId]);
+    await db.query("DELETE FROM project_members WHERE user_id=$1", [userId]);
+    await db.query("UPDATE tickets SET assignee_id=NULL WHERE assignee_id=$1", [userId]);
+    await audit(db, { user: req.user, action: `Deleted member ${userId}` });
+  });
+  res.json({ status: "deleted" });
+});
+app.delete("/api/invitations/:id", roles("admin"), async (req, res) => {
+  const invitationId = id.parse(req.params.id);
+  const result = await query(
+    "DELETE FROM invitations WHERE id=$1 AND accepted_at IS NULL RETURNING id",
+    [invitationId],
+  );
+  if (!result.rowCount) fail(404, "Invitation not found or already accepted");
+  res.json({ status: "deleted" });
+});
 app.post("/api/invitations", roles("admin"), async (req, res) => {
   const input = z
     .object({

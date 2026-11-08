@@ -604,6 +604,11 @@
           <b>Client</b><span>View projects, approve estimates & comment</span>
         </div>
       </div>
+      <div class="team-filters">
+        <label>Filter by email<input type="search" placeholder="Search email" [ngModel]="teamEmail()" (ngModelChange)="teamEmail.set($event)" /></label>
+        <label>Role<select [ngModel]="teamRole()" (ngModelChange)="teamRole.set($event)"><option value="all">All roles</option><option value="admin">Admin</option><option value="developer">Developer</option><option value="client">Client</option></select></label>
+        <button class="button compact" (click)="teamEmail.set(''); teamRole.set('all')" [disabled]="!teamEmail() && teamRole()==='all'">Clear filters</button>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
@@ -611,11 +616,11 @@
               <th>Member</th>
               <th>Role title</th>
               <th>Access</th>
-              <th>Status</th>
+              <th>Status</th><th><span class="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
-            @for(m of team().users;track m.id){
+            @for(m of filteredMembers();track m.id){
             <tr>
               <td>
                 <div class="person-cell">
@@ -626,14 +631,29 @@
               <td>{{m.title||'—'}}</td>
               <td><span class="role-pill">{{m.role|titlecase}}</span></td>
               <td><span class="member-active">● Active</span></td>
+              <td class="team-actions" (click)="$event.stopPropagation()">
+                <button class="button compact" aria-label="Options for {{m.email}}" [attr.aria-expanded]="teamOptions()==='member-'+m.id" (click)="teamOptions.set(teamOptions()==='member-'+m.id?'':'member-'+m.id)">⋯</button>
+                @if(teamOptions()==='member-'+m.id){
+                <div class="team-options"><button class="delete-action" [disabled]="busy() || m.id===user()?.id" (click)="confirmTeamDelete(m, 'member')">Delete member</button>@if(m.id===user()?.id){<small>You cannot delete your own account.</small>}</div>
+                }
+              </td>
             </tr>
-            }@for(m of team().invitations;track m.id){
+            }@for(m of filteredInvitations();track m.id){
             <tr>
               <td><b>{{m.name}}</b><small>{{m.email}}</small></td>
               <td>{{m.title||'—'}}</td>
               <td>{{m.role|titlecase}}</td>
               <td>Invitation · expires {{date(m.expires_at)}}</td>
+              <td class="team-actions" (click)="$event.stopPropagation()">
+                <button class="button compact" aria-label="Options for {{m.email}}" [attr.aria-expanded]="teamOptions()==='invitation-'+m.id" (click)="teamOptions.set(teamOptions()==='invitation-'+m.id?'':'invitation-'+m.id)">⋯</button>
+                @if(teamOptions()==='invitation-'+m.id){
+                <div class="team-options"><button class="delete-action" [disabled]="busy()" (click)="confirmTeamDelete(m, 'invitation')">Delete invitation</button></div>
+                }
+              </td>
             </tr>
+            }
+            @if(!filteredMembers().length && !filteredInvitations().length){
+            <tr><td colspan="5" class="empty-table">No members or invitations match these filters.</td></tr>
             }
           </tbody>
         </table>
@@ -686,6 +706,17 @@
     <button class="modal-close" aria-label="Close dialog" (click)="close()">
       ×
     </button>
+    @if(modal()==='deleteTeam' && deleteTarget(); as target){
+    <span class="eyebrow">TEAM & ACCESS</span>
+    <h2>Delete {{target.kind}}?</h2>
+    <p>Delete <strong>{{target.email}}</strong>?</p>
+    <p>{{target.kind==='member' ? 'Their access will be revoked. Existing project history and comments will be preserved.' : 'Their invitation link will stop working.'}} This action cannot be undone.</p>
+    @if(error()){<p role="alert">{{error()}}</p>}
+    <div class="form-footer">
+      <button class="button" [disabled]="busy()" (click)="close()">Cancel</button>
+      <button class="button danger" [disabled]="busy()" (click)="deleteTeamEntry()">{{busy() ? 'Deleting…' : 'Delete '+target.kind}}</button>
+    </div>
+    }
     @if(modal()==='project'){<span class="eyebrow">WORKSPACE</span>
     <h2>New project</h2>
     <form (ngSubmit)="createProject()">

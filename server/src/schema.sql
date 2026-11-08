@@ -16,3 +16,5 @@ CREATE INDEX IF NOT EXISTS tickets_project_idx ON tickets(project_id);
 CREATE INDEX IF NOT EXISTS history_project_idx ON history(project_id,created_at DESC);
 CREATE INDEX IF NOT EXISTS history_ticket_idx ON history(ticket_id,created_at DESC);
 CREATE INDEX IF NOT EXISTS comments_ticket_idx ON comments(ticket_id);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at timestamptz;

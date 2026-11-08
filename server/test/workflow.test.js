@@ -574,6 +574,34 @@ test(
         );
       },
     );
+    await t.test("team deletion enforces permissions and revokes access", async () => {
+      const member = (await query(
+        "INSERT INTO users(email,name,role,password_hash) VALUES('removed@example.com','Removed','developer',$1) RETURNING id",
+        [await hashPassword(password)],
+      )).rows[0];
+      const rawSession = token();
+      await query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '1 day')", [digest(rawSession), member.id]);
+      await query("INSERT INTO project_members(project_id,user_id) VALUES($1,$2)", [project.id, member.id]);
+      await query("INSERT INTO comments(ticket_id,author_id,body) VALUES($1,$2,'Keep this history')", [ticket.id, member.id]);
+      const admin = (await call().get("/api/auth/me").set(auth("admin"))).body;
+      assert.equal((await call().delete(`/api/team/${member.id}`).set(auth("client"))).status, 403);
+      assert.equal((await call().delete(`/api/team/${admin.id}`).set(auth("admin"))).status, 409);
+      assert.equal((await call().delete(`/api/team/${member.id}`).set(auth("admin"))).status, 200);
+      assert.equal((await call().get("/api/auth/me").set({ Authorization: `Bearer ${rawSession}` })).status, 401);
+      assert.equal((await call().post("/api/auth/login").send({email: 'removed@example.com', password})).status, 401);
+      assert.equal((await call().get("/api/team").set(auth("admin"))).body.users.some(u => u.id === member.id), false);
+      assert.equal((await query("SELECT 1 FROM comments WHERE author_id=$1", [member.id])).rowCount, 1);
+      assert.equal((await query("SELECT 1 FROM project_members WHERE user_id=$1", [member.id])).rowCount, 0);
+      assert.equal((await call().delete(`/api/team/${member.id}`).set(auth("admin"))).status, 404);
+    });
+    await t.test("invitation deletion invalidates the link", async () => {
+      const raw = token();
+      const invitation = (await query("INSERT INTO invitations(email,name,role,token_hash,expires_at) VALUES('cancel@example.com','Cancel','client',$1,now()+interval '1 day') RETURNING id", [digest(raw)])).rows[0];
+      assert.equal((await call().delete(`/api/invitations/${invitation.id}`).set(auth("developer"))).status, 403);
+      assert.equal((await call().delete(`/api/invitations/${invitation.id}`).set(auth("admin"))).status, 200);
+      assert.equal((await query("SELECT 1 FROM invitations WHERE token_hash=$1", [digest(raw)])).rowCount, 0);
+      assert.equal((await call().delete(`/api/invitations/${invitation.id}`).set(auth("admin"))).status, 404);
+    });
     await t.test("logout invalidates the server-side session", async () => {
       assert.equal(
         (await call().post("/api/auth/logout").set(auth("developer"))).status,

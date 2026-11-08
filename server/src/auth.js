@@ -31,7 +31,7 @@ export async function authenticate(req, res, next) {
   const raw = req.headers.authorization?.replace(/^Bearer /, "");
   if (!raw) return res.status(401).json({ error: "Sign in required" });
   const { rows } = await query(
-    "SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now()",
+    "SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.deleted_at IS NULL",
     [digest(raw)],
   );
   if (!rows[0]) return res.status(401).json({ error: "Session expired" });
