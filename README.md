@@ -14,7 +14,7 @@ Angular 22 dashboard, Express 5 API, PostgreSQL 17. Branded with the supplied DE
 
 - Create projects and itemized USD/EUR/GBP estimates; download branded PDFs.
 - Send estimates by SMTP with PDF attachments and private approval links.
-- Clients approve via their portal or the emailed link. An admin activates the approved project.
+- Clients approve via their portal or the emailed link. An admin can activate any project, with or without an estimate, and edit its name, client, description, and status.
 - Five ticket states: Backlog → Active → In review → Solved → Closed. Drag cards or use the accessible status selector.
 - Tickets include title, description, acceptance criteria, HTTP(S) links, assignee, priority, attachments, comments, and a side panel showing who changed what and when.
 - Invitation-only accounts. The first owner is invited using a bootstrap command; subsequent admins are invited by an existing admin.
@@ -71,7 +71,7 @@ TEST_DATABASE_URL=postgres://kraken:kraken@localhost:5432/kraken_test npm test
 npm audit
 ```
 
-Tests create and clean up a unique PostgreSQL schema. A local SMTP sink verifies mail delivery without sending real mail. The suite covers unauthenticated requests, role restrictions, cross-project isolation, activation gating, PDF generation, email attachments, invitation replay, estimate approval replay, optimistic ticket transitions, comments, asset downloads, audit authors/dates, and session invalidation. Without TEST_DATABASE_URL the integration suite is skipped; CI always supplies it.
+Tests create and clean up a unique PostgreSQL schema. A local SMTP sink verifies mail delivery without sending real mail. The suite covers unauthenticated requests, role restrictions, cross-project isolation, manual activation, project editing and deletion, project file access, PDF generation, email attachments, invitation replay, estimate approval replay, optimistic ticket transitions, comments, asset downloads, audit authors/dates, and session invalidation. Without TEST_DATABASE_URL the integration suite is skipped; CI always supplies it.
 
 ## Deployment
 
@@ -94,3 +94,5 @@ Terraform provisions Cloud SQL, automatic backups/PITR, Artifact Registry, secre
 - Database changes and history entries are transactional. Email uses SMTP; delivery is initiated inside the transaction. SMTP delivery and PostgreSQL commit cannot be atomic: rare delivery/commit failures require resending. A durable outbox is a future improvement for higher email volume.
 - The baseline uses one Cloud SQL zone and shared-core sizing; adjust the tier and availability before larger workloads. Cloud Run scales to zero, but Cloud SQL incurs ongoing costs.
 - Password recovery, user removal, MFA, billing, and antivirus scanning are outside this initial scope.
+
+Project files support admin/client uploads and downloads by project members (5 MB per file). Admins can permanently delete a project after a confirmation dialog; its tickets, comments, estimates, files, memberships, and project history are removed. Run the database migration before using project files.

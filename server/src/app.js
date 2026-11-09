@@ -261,9 +261,37 @@ app.post("/api/projects", roles("admin"), async (req, res) => {
   });
   res.status(201).json(result);
 });
+app.patch("/api/projects/:id", roles("admin"), async (req, res) => {
+  const input = z.object({
+    name: text, client_name: text, description: z.string().max(20000),
+    status: z.enum(["estimated", "active", "closed"]),
+  }).strict().parse(req.body);
+  const result = await transaction(async (db) => {
+    await projectAccess(req.user, req.params.id, db);
+    const { rows } = await db.query(
+      "UPDATE projects SET name=$1,client_name=$2,description=$3,status=$4 WHERE id=$5 RETURNING *",
+      [input.name, input.client_name, input.description, input.status, req.params.id],
+    );
+    await audit(db, { projectId: req.params.id, user: req.user, action: `Updated project details; status: ${input.status}` });
+    return rows[0];
+  });
+  res.json(result);
+});
+app.delete("/api/projects/:id", roles("admin"), async (req, res) => {
+  await transaction(async (db) => {
+    const project = await projectAccess(req.user, req.params.id, db);
+    await db.query("SELECT id FROM projects WHERE id=$1 FOR UPDATE", [project.id]);
+    await db.query("DELETE FROM history WHERE project_id=$1 OR ticket_id IN (SELECT id FROM tickets WHERE project_id=$1)", [project.id]);
+    await db.query("DELETE FROM tickets WHERE project_id=$1", [project.id]);
+    await db.query("DELETE FROM estimates WHERE project_id=$1", [project.id]);
+    await db.query("DELETE FROM projects WHERE id=$1", [project.id]);
+    await audit(db, { user: req.user, action: `Deleted project ${project.name} (${project.id})` });
+  });
+  res.sendStatus(204);
+});
 app.patch("/api/projects/:id/status", roles("admin"), async (req, res) => {
   const { status } = z
-    .object({ status: z.enum(["active", "closed"]) })
+    .object({ status: z.enum(["estimated", "active", "closed"]) })
     .strict()
     .parse(req.body);
   const result = await transaction(async (db) => {
@@ -271,16 +299,6 @@ app.patch("/api/projects/:id/status", roles("admin"), async (req, res) => {
     await db.query("SELECT id FROM projects WHERE id=$1 FOR UPDATE", [
       req.params.id,
     ]);
-    if (
-      status === "active" &&
-      !(
-        await db.query(
-          "SELECT 1 FROM estimates WHERE project_id=$1 AND status='approved'",
-          [req.params.id],
-        )
-      ).rowCount
-    )
-      fail(409, "Client approval is required before activation");
     const { rows } = await db.query(
       "UPDATE projects SET status=$1 WHERE id=$2 RETURNING *",
       [status, req.params.id],
@@ -483,6 +501,31 @@ app.post(
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+});
+app.get("/api/projects/:id/files", async (req, res) => {
+  await projectAccess(req.user, req.params.id);
+  res.json((await query("SELECT id,name,mime,size,created_at FROM project_files WHERE project_id=$1 ORDER BY created_at DESC", [req.params.id])).rows);
+});
+app.post("/api/projects/:id/files", roles("admin", "client"),
+  async (req, res, next) => {
+    await projectAccess(req.user, req.params.id);
+    next();
+  }, upload.single("file"), async (req, res) => {
+    if (!req.file) fail(400, "Choose a file");
+    await transaction(async (db) => {
+      await projectAccess(req.user, req.params.id, db);
+      await db.query("INSERT INTO project_files(project_id,name,mime,size,data,created_by) VALUES($1,$2,$3,$4,$5,$6)",
+        [req.params.id, req.file.originalname, req.file.mimetype, req.file.size, req.file.buffer, req.user.id]);
+      await audit(db, { projectId: req.params.id, user: req.user, action: `Uploaded project file ${req.file.originalname}` });
+    });
+    res.status(201).json({ status: "uploaded" });
+});
+app.get("/api/project-files/:id", async (req, res) => {
+  id.parse(req.params.id);
+  const { rows } = await query("SELECT * FROM project_files WHERE id=$1", [req.params.id]);
+  if (!rows[0]) fail(404, "File not found");
+  await projectAccess(req.user, rows[0].project_id);
+  res.attachment(rows[0].name).type("application/octet-stream").send(rows[0].data);
 });
 app.post(
   "/api/tickets/:id/assets",

@@ -18,3 +18,13 @@ CREATE INDEX IF NOT EXISTS history_ticket_idx ON history(ticket_id,created_at DE
 CREATE INDEX IF NOT EXISTS comments_ticket_idx ON comments(ticket_id);
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+
+CREATE TABLE IF NOT EXISTS project_files (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+ project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ name text NOT NULL, mime text NOT NULL,
+ size integer NOT NULL CHECK(size >= 0 AND size <= 5242880),
+ data bytea NOT NULL, created_by uuid REFERENCES users(id),
+ created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS project_files_project_idx ON project_files(project_id);

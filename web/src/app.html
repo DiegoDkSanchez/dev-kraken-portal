@@ -235,6 +235,12 @@
         >}
       </div>
       @if(page()==='board'){ @if(project(); as p){
+<div class="project-actions">
+        @if(admin()){
+          <button class="button" [disabled]="busy()" (click)="editProject(p)">Edit project</button>
+          <button class="button danger" [disabled]="busy()" (click)="confirmProjectDelete(p)">Delete project</button>
+        }
+      </div>
       <section class="project-strip">
         <div class="project-symbol">{{initials(p.name)}}</div>
         <div class="project-picker">
@@ -359,19 +365,35 @@
       </div>
       @if(p.status==='estimated'){
       <div class="info-banner">
-        <span>Awaiting estimate approval</span>@if(admin()){<button
+        <span>Activate this project with or without an estimate.</span>@if(admin()){<button
           class="button"
           (click)="navigate('estimates')"
         >
           View estimates ↗</button
-        >@if(hasApproval(p)){<button
+        ><button
           class="button primary"
           (click)="activate(p)"
         >
           Activate project</button
-        >}}
+        >}
       </div>
-      } @if(view()==='board'){
+      }
+      <details class="project-documents">
+        <summary>Project files ({{projectFiles().length}})</summary>
+        <p>Contracts, legal documents, and other project files. Visible to project members.</p>
+        @if(admin()||user()?.role==='client'){
+          <label>Upload file (up to 5 MB)
+            <input type="file" [disabled]="busy()" (change)="uploadProjectFile($event)" />
+          </label>
+        }
+        @for(file of projectFiles();track file.id){
+          <div class="project-file">
+            <button class="text-button" [disabled]="busy()" (click)="download('/project-files/'+file.id,file.name)">{{file.name}}</button>
+            <small>{{(file.size/1024)|number:'1.0-1'}} KB · {{date(file.created_at)}}</small>
+          </div>
+        }@empty{<p>No files saved yet.</p>}
+      </details>
+      @if(view()==='board'){
       <div class="board">
         @for(state of states;track state.id){
         <section
@@ -515,12 +537,18 @@
               Open board ↗
             </button>
           </div>
-          @if(admin()&&p.status==='estimated'&&hasApproval(p)){<button
+          @if(admin()&&p.status==='estimated'){<button
             class="button primary full"
             (click)="activate(p)"
           >
             Activate project</button
           >}
+<div class="project-actions">
+        @if(admin()){
+          <button class="button" [disabled]="busy()" (click)="editProject(p)">Edit project</button>
+          <button class="button danger" [disabled]="busy()" (click)="confirmProjectDelete(p)">Delete project</button>
+        }
+      </div>
         </article>
         }@empty{
         <div class="empty-page">
@@ -717,8 +745,17 @@
       <button class="button danger" [disabled]="busy()" (click)="deleteTeamEntry()">{{busy() ? 'Deleting…' : 'Delete '+target.kind}}</button>
     </div>
     }
+    @if(modal()==='deleteProject' && projectDeleteTarget(); as target){
+      <span class="eyebrow">DELETE PROJECT</span>
+      <h2>Delete {{target.name}}?</h2>
+      <p>This permanently deletes the project and all its tickets, comments, estimates, files, and activity history. This cannot be undone.</p>
+      <div class="form-footer">
+        <button class="button" [disabled]="busy()" (click)="close()">Cancel</button>
+        <button class="button danger" [disabled]="busy()" (click)="deleteProject()">{{busy() ? 'Deleting…' : 'Delete project'}}</button>
+      </div>
+    }
     @if(modal()==='project'){<span class="eyebrow">WORKSPACE</span>
-    <h2>New project</h2>
+<h2>{{projectEditId ? 'Edit project' : 'New project'}}</h2>
     <form (ngSubmit)="createProject()">
       <label
         >Project name<input
@@ -741,10 +778,18 @@
           rows="3"
         ></textarea>
       </label>
+      @if(projectEditId){
+        <label>Status<select name="status" [(ngModel)]="projectStatus">
+          <option value="estimated">Estimated</option>
+          <option value="active">Active</option>
+          <option value="closed">Closed</option>
+        </select></label>
+        <p>You can activate a project without an estimate.</p>
+      }
       <div class="form-footer">
         <button type="button" class="button" (click)="close()">Cancel</button
         ><button class="button primary" [disabled]="busy()">
-          Create project
+          {{projectEditId ? 'Save changes' : 'Create project'}}
         </button>
       </div>
     </form>

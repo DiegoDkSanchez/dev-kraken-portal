@@ -140,6 +140,10 @@ export class App {
   approval = signal<any>(null);
   approvalName = "";
   approvalAccepted = false;
+  projectEditId = "";
+  projectDeleteTarget = signal<Project | null>(null);
+  projectFiles = signal<any[]>([]);
+  projectStatus = "estimated";
   projectForm = { name: "", client_name: "", description: "" };
   ticketForm = {
     title: "",
@@ -305,18 +309,21 @@ export class App {
   }
   async loadProject() {
     if (!this.selectedProject()) {
+      this.projectFiles.set([]);
       this.tickets.set([]);
       this.members.set([]);
       this.history.set([]);
       return;
     }
     const pid = this.selectedProject();
-    const [tickets, members, history] = await Promise.all([
+    const [tickets, members, history, files] = await Promise.all([
       this.request(`/projects/${pid}/tickets`),
       this.request(`/projects/${pid}/members`),
       this.request(`/projects/${pid}/history`),
+      this.request(`/projects/${pid}/files`),
     ]);
     if (pid !== this.selectedProject()) return;
+    this.projectFiles.set(files);
     this.tickets.set(tickets);
     this.members.set(members);
     this.history.set(history);
@@ -341,6 +348,7 @@ export class App {
     this.estimates.set([]);
     this.members.set([]);
     this.history.set([]);
+    this.projectFiles.set([]);
     this.team.set({users: [], invitations: []});
     this.detail.set(null);
     this.modal.set("");
@@ -424,17 +432,65 @@ export class App {
     setTimeout(() => this.notice.set(""), 4500);
   }
   openProject() {
+    this.projectEditId = "";
     this.projectForm = { name: "", client_name: "", description: "" };
     this.modal.set("project");
   }
   createProject() {
     this.run(async () => {
-      const p = await this.request("/projects", "POST", this.projectForm);
+      const p = await this.request(
+        this.projectEditId ? `/projects/${this.projectEditId}` : "/projects",
+        this.projectEditId ? "PATCH" : "POST",
+        this.projectEditId ? { ...this.projectForm, status: this.projectStatus } : this.projectForm,
+      );
       this.selectedProject.set(p.id);
       await this.refresh();
       this.modal.set("");
       this.page.set("board");
-      this.toast("Project created");
+      this.toast(this.projectEditId ? "Project updated" : "Project created");
+    });
+  }
+  editProject(p: Project) {
+    this.projectEditId = p.id;
+    this.projectForm = { name: p.name, client_name: p.client_name, description: p.description };
+    this.projectStatus = p.status;
+    this.modal.set("project");
+  }
+  confirmProjectDelete(p: Project) {
+    this.projectDeleteTarget.set(p);
+    this.modal.set("deleteProject");
+  }
+  deleteProject() {
+    const p = this.projectDeleteTarget();
+    if (!p) return;
+    this.run(async () => {
+      await this.request(`/projects/${p.id}`, "DELETE");
+      this.modal.set("");
+      this.projectDeleteTarget.set(null);
+      await this.refresh();
+      this.toast("Project deleted");
+    });
+  }
+  uploadProjectFile(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    const pid = this.selectedProject();
+    if (!file || !pid) return;
+    if (file.size > 5242880) {
+      this.error.set("Choose a file up to 5 MB");
+      input.value = "";
+      return;
+    }
+    this.run(async () => {
+      try {
+        const data = new FormData();
+        data.append("file", file);
+        await this.request(`/projects/${pid}/files`, "POST", data);
+        await this.loadProject();
+        this.toast("Project file saved");
+      } finally {
+        input.value = "";
+      }
     });
   }
   openTicketForm() {
