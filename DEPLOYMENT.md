@@ -109,3 +109,7 @@ Reference documentation: [Angular compatibility](https://angular.dev/reference/v
 The `dev-kraken-portal` repository owns the `devkraken.xyz` custom domain, with GitHub Actions as its Pages source. Pages is disabled in the former `dev-kraken-web` repository; retain that repository for history. Existing GitHub Pages DNS records continue to apply because the account and hosting provider are unchanged. Enable HTTPS enforcement after GitHub provisions the domain certificate.
 
 The deployment builds Angular with `/portal/` as its base href, copies only public landing files to `dist/pages/`, and places Angular output in `dist/pages/portal/`. The API remains on Cloud Run. Set the production environment variable `APP_URL=https://devkraken.xyz/portal`; the deployment derives CORS origin `https://devkraken.xyz` and email links from it. Hash-based invitation and approval links work without a Pages SPA rewrite.
+
+### Email deliverability
+
+Production SMTP requires TLS (port 465 or STARTTLS). Set optional `MAIL_REPLY_TO` in the GitHub production environment to a monitored mailbox. Verify SPF, DKIM, and DMARC with the SMTP provider; see [email delivery documentation](doc/email-deliverability.md) for current measures and verification steps.

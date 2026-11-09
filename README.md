@@ -96,3 +96,5 @@ Terraform provisions Cloud SQL, automatic backups/PITR, Artifact Registry, secre
 - Password recovery, user removal, MFA, billing, and antivirus scanning are outside this initial scope.
 
 Project files support admin/client uploads and downloads by project members (5 MB per file). Admins can permanently delete a project after a confirmation dialog; its tickets, comments, estimates, files, memberships, and project history are removed. Run the database migration before using project files.
+
+Email formatting, deliverability measures, and provider/DNS verification steps: [doc/email-deliverability.md](doc/email-deliverability.md).

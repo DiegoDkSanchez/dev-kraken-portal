@@ -17,6 +17,7 @@ import {
   safeUser,
 } from "./auth.js";
 import { sendMail } from "./mail.js";
+import { estimateEmail } from "./estimate-email.js";
 import { estimatePDF } from "./pdf.js";
 const app = express();
 app.set("trust proxy", 1);
@@ -655,8 +656,7 @@ app.post("/api/estimates/:id/send", roles("admin"), async (req, res) => {
     const link = `${process.env.APP_URL}/#approve=${raw}`;
     await sendMail({
       to: e.client_email,
-      subject: `DEV KRAKEN · ${e.title}`,
-      text: `${p.client_name},\n\nYour estimate for ${p.name} is ready.\nReview, download and approve: ${link}\n\nDEV KRAKEN`,
+      ...estimateEmail(e, p, link),
       attachments: [
         {
           filename: `EST-${e.number}.pdf`,

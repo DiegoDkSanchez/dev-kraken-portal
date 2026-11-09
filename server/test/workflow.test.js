@@ -253,6 +253,9 @@ test(
         assert.equal(sent.status, 200);
         assert.equal(messages.length, 1);
         assert.match(messages[0], /application\/pdf/);
+        assert.match(messages[0], /multipart\/alternative/);
+        assert.match(messages[0], /text\/html/);
+        assert.match(messages[0], /text\/plain/);
         assert.match(messages[0], /client@example.com/);
         assert.equal(
           (await call().get("/api/estimates").set(auth("client"))).body[0]

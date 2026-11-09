@@ -19,6 +19,7 @@ console.log(
       SMTP_PORT: env.SMTP_PORT || "587",
       SMTP_USER: env.SMTP_USER,
       MAIL_FROM: env.MAIL_FROM,
+      MAIL_REPLY_TO: env.MAIL_REPLY_TO || "",
     },
     null,
     2,
