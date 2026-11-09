@@ -2341,3 +2341,10 @@ td small {
 .delete-action:disabled { opacity: .5; cursor: not-allowed; }
 .button.danger { background: #b42318; color: white; border-color: #b42318; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+.project-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.project-documents { margin: 16px 0; padding: 16px; border: 1px solid #dce2e8; border-radius: 12px; }
+.project-documents summary { cursor: pointer; font-weight: 600; }
+.project-documents p { margin: 12px 0; color: #667085; }
+.project-file { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
+.project-file button { overflow-wrap: anywhere; text-align: left; }

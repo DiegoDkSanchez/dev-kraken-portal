@@ -173,25 +173,37 @@ test(
         );
       },
     );
-    await t.test("activation requires an approved estimate", async () => {
-      assert.equal(
-        (
-          await call()
-            .patch(`/api/projects/${project.id}/status`)
-            .set(auth("admin"))
-            .send({ status: "active" })
-        ).status,
-        409,
-      );
-      assert.equal(
-        (
-          await call()
-            .post(`/api/projects/${project.id}/tickets`)
-            .set(auth("admin"))
-            .send({ title: "Premature" })
-        ).status,
-        409,
-      );
+    await t.test("admins activate without estimates and edit every project state", async () => {
+      assert.equal((await call().post(`/api/projects/${project.id}/tickets`).set(auth("admin")).send({title:"Premature"})).status, 409);
+      assert.equal((await call().patch(`/api/projects/${project.id}/status`).set(auth("admin")).send({status:"active"})).status, 200);
+      assert.equal((await query("SELECT 1 FROM estimates WHERE project_id=$1", [project.id])).rowCount, 0);
+      const body = {name:"Updated portal",client_name:"Updated client",description:"Edited",status:"closed"};
+      for (const role of ["client","developer"])
+        assert.equal((await call().patch(`/api/projects/${project.id}`).set(auth(role)).send(body)).status, 403);
+      for (const status of ["closed","estimated","active"]) {
+        const result = await call().patch(`/api/projects/${project.id}`).set(auth("admin")).send({...body,status});
+        assert.equal(result.status, 200);
+        assert.equal(result.body.name, body.name);
+        assert.equal(result.body.status, status);
+      }
+      assert.equal((await call().patch(`/api/projects/${project.id}`).set(auth("admin")).send({...body,status:"invalid"})).status, 400);
+    });
+    await t.test("project files persist and enforce membership and upload limits", async () => {
+      const path = `/api/projects/${project.id}/files`;
+      assert.equal((await call().post(path).set(auth("developer")).attach("file",Buffer.from("no"),"no.txt")).status,403);
+      assert.equal((await call().post(path).set(auth("outsider")).attach("file",Buffer.from("no"),"no.txt")).status,404);
+      assert.equal((await call().post(path).set(auth("admin"))).status,400);
+      assert.equal((await call().post(path).set(auth("admin")).attach("file",Buffer.alloc(5242881),"large.pdf")).status,400);
+      assert.equal((await call().post(path).set(auth("client")).attach("file",Buffer.from("Legal contract"),"contract.txt")).status,201);
+      const files = await call().get(path).set(auth("developer"));
+      assert.equal(files.body.length,1);
+      assert.equal(files.body[0].data,undefined);
+      const filePath = `/api/project-files/${files.body[0].id}`;
+      assert.equal((await call().get(path).set(auth("outsider"))).status,404);
+      assert.equal((await call().get(filePath).set(auth("outsider"))).status,404);
+      const download = await call().get(filePath).set(auth("client"));
+      assert.equal(download.body.toString(),"Legal contract");
+      assert.match(download.headers["content-disposition"],/attachment/);
     });
     await t.test(
       "creates estimates, denies developer access, and hides drafts from clients",
@@ -241,6 +253,9 @@ test(
         assert.equal(sent.status, 200);
         assert.equal(messages.length, 1);
         assert.match(messages[0], /application\/pdf/);
+        assert.match(messages[0], /multipart\/alternative/);
+        assert.match(messages[0], /text\/html/);
+        assert.match(messages[0], /text\/plain/);
         assert.match(messages[0], /client@example.com/);
         assert.equal(
           (await call().get("/api/estimates").set(auth("client"))).body[0]
@@ -601,6 +616,18 @@ test(
       assert.equal((await call().delete(`/api/invitations/${invitation.id}`).set(auth("admin"))).status, 200);
       assert.equal((await query("SELECT 1 FROM invitations WHERE token_hash=$1", [digest(raw)])).rowCount, 0);
       assert.equal((await call().delete(`/api/invitations/${invitation.id}`).set(auth("admin"))).status, 404);
+    });
+    await t.test("only admins delete projects and all dependent records", async () => {
+      for (const role of ["developer","client"])
+        assert.equal((await call().delete(`/api/projects/${project.id}`).set(auth(role))).status,403);
+      assert.equal((await call().delete(`/api/projects/${project.id}`).set(auth("admin"))).status,204);
+      for (const table of ["tickets","estimates","project_files","project_members","invitation_projects","history"])
+        assert.equal((await query(`SELECT 1 FROM ${table} WHERE project_id=$1`,[project.id])).rowCount,0);
+      for (const table of ["comments","assets"])
+        assert.equal((await query(`SELECT 1 FROM ${table} WHERE ticket_id=$1`,[ticket.id])).rowCount,0);
+      assert.equal((await call().get(`/api/projects/${project.id}/files`).set(auth("admin"))).status,404);
+      assert.equal((await call().delete(`/api/projects/${project.id}`).set(auth("admin"))).status,404);
+      assert.ok((await call().get("/api/projects").set(auth("admin"))).body.some(p=>p.id===otherProject.id));
     });
     await t.test("logout invalidates the server-side session", async () => {
       assert.equal(
