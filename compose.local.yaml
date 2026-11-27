@@ -1,0 +1,82 @@
+name: kraken-local
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.local
+  init: true
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: kraken_local
+      POSTGRES_USER: kraken_local
+      POSTGRES_PASSWORD: local-only-password
+    volumes:
+      - postgres-local:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kraken_local -d kraken_local"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  mail:
+    image: axllent/mailpit:v1.27
+    ports:
+      - "127.0.0.1:8025:8025"
+
+  api:
+    <<: *app
+    command: ["node", "--watch", "server/src/index.js"]
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://kraken_local:local-only-password@postgres:5432/kraken_local
+      PORT: "4000"
+      APP_URL: http://localhost:4200
+      CORS_ORIGINS: http://localhost:4200
+      SMTP_HOST: mail
+      SMTP_PORT: "1025"
+      MAIL_FROM: portal@kraken.local
+      OWNER_EMAIL: owner@kraken.local
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - ./server/src:/app/server/src:ro
+      - ./server/test:/app/server/test:ro
+      - ./server/assets:/app/server/assets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mail:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  web:
+    <<: *app
+    command: ["npm", "start", "--", "--poll=1000"]
+    ports:
+      - "127.0.0.1:4200:4200"
+    volumes:
+      - ./web/src:/app/web/src:ro
+      - ./web/public:/app/web/public:ro
+      - ./docker/config.local.js:/app/web/public/config.js:ro
+      - ./web/tsconfig.app.json:/app/web/tsconfig.app.json:ro
+      - ./angular.json:/app/angular.json:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4200').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+volumes:
+  postgres-local:
