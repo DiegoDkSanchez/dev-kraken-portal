@@ -33,6 +33,10 @@ Angular 22 dashboard, Express 5 API, PostgreSQL 17. Branded with the supplied DE
 
 ## Local development
 
+For a fully containerized setup with no host Node/npm/PostgreSQL installation, follow [the local Docker guides](docs/README.md). They cover frontend, backend, database, email, testing, and resetting sample data.
+
+### Host-based alternative
+
 Requires Node 24.15+ and PostgreSQL 17; Docker Compose is an optional way to start PostgreSQL and Mailpit.
 
 ```sh
